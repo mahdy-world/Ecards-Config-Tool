@@ -1,0 +1,6 @@
+platform:
+	ticketPrinterURL: custom
+	ticketPrinterHost: COM2
+	printerName: default
+	syncClock: false
+	qrReaderPort: COM6

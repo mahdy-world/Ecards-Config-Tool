@@ -1,16 +1,14 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, CENTER, filedialog
 from tkinter.messagebox import showinfo, showwarning
-from calendar import month_name
-from tkinter import CENTER
-import sqlite3,sys, os
-import requests
-import json
+import sqlite3, sys ,os ,requests, psutil
+
+
 
 root = tk.Tk()
 
 # config the root window
-root.geometry("600x300")
+root.geometry("400x350")
 root.title('E-cards Config Tool')
 
 # Get device serial number
@@ -24,13 +22,43 @@ def getMachine_addr():
         command = "ioreg -l | grep IOPlatformSerialNumber"
     return os.popen(command).read().replace("\n", "").replace("	", "").replace(" ", "")
 
+# check tom old or new
+def tom_type():
+    info = psutil.virtual_memory().total
+    if info < 10889192448:
+        print("old")
+        return "Tom-Old"
+    else:
+        print("new")
+        return "Tom-New"
+tom_type()
+
 # serial number
 my_string_var = tk.StringVar()
-my_string_var.set("Device Serial Number : " + getMachine_addr().strip("SerialNumber"))
+my_string_var.set(tom_type() + " : " + getMachine_addr().strip("SerialNumber"))
 
 # serial number label
 serial_device = tk.Label(root, textvariable=my_string_var, font=('Helvetica 12 bold'))
 serial_device.pack(fill=tk.X, padx=6, pady=6)
+
+device_path = 'C:\ENR-TOM\config'
+
+
+def get_path():
+    # check folder path
+    if os.path.exists(device_path):
+        end_path = device_path
+    else:
+        folder = filedialog.askdirectory()
+        end_path = folder
+    return end_path
+
+
+myvar =  tk.StringVar()
+myvar.set("Path: " + get_path())
+label_path = tk.Label(root, textvariable=myvar, font=('Helvetica 10 bold'))
+label_path.pack(fill=tk.X, padx=4, pady=4)
+
 
 # Station label
 station_label = ttk.Label(text="Select Station: ", font=('Helvetica 14 bold'))
@@ -41,16 +69,16 @@ my_list = []
 conn = sqlite3.connect("db.sqlite3")
 cur = conn.cursor()
 # return all station arabic name
-cur.execute("SELECT Id FROM Enr_stations ")
+cur.execute("SELECT Arabic_Name FROM Stations ")
 rows = cur.fetchall()
 for row in rows:
     my_list.append(row)
 
-# create a combobox
+# create a station combobox
 selected_station = tk.StringVar()
 station_combo = ttk.Combobox(root, textvariable=selected_station)
 # values for station
-station_combo['values'] = my_list
+station_combo['values'] = [item for result in my_list for item in result if item]
 # change state to readonly
 station_combo['state'] = 'readonly'
 # change place for station combobox
@@ -60,85 +88,86 @@ station_combo.pack(fill=tk.X, padx=5, pady=5)
 office_label = ttk.Label(text="Select Office: ", font=('Helvetica 14 bold'))
 # change place
 office_label.pack(fill=tk.X, padx=5, pady=5)
-
+# create office combobox
 selected_office = tk.StringVar()
 office_combo = ttk.Combobox(root, textvariable=selected_office)
 office_combo.pack(fill=tk.X, padx=6, pady=6)
 
 
+# create window label
+window_labal = ttk.Label(text="Select Window: ", font=('Helvetica 14 bold'))
+window_labal.pack(fill=tk.X,  padx=5, pady=5)
+
+selected_window = tk.StringVar()
+window_combo = ttk.Combobox(root, textvariable=selected_window)
+window_combo.pack(fill=tk.X, padx=6, pady=6)
+
+
+
 # bind the selected value changes
 def station_changed(event):
+    # clear office data
     office_combo.set('')
+    # station value
     x = selected_station.get()
     office_list = []
     query = conn.cursor()
-    query.execute("SELECT name FROM offices WHERE station_id=?", (x,))
+    query.execute("SELECT name FROM Offices WHERE station_id=?", (x,))
     rows = query.fetchall()
 
     if len(rows) > 0:
         for row in rows:
             office_list.append(row)
-            office_combo['values'] = office_list
+            office_combo['values'] = [o_item for o_result in office_list for o_item in o_result if o_item]
     else:
         office_combo['values'] = office_list
 
 station_combo.bind('<<ComboboxSelected>>', station_changed)
 
-def office_value(event):
-    office_value_var = selected_office.get()
-    return office_value_var
 
-office_combo.bind('<<ComboboxSelected>>', office_value)
+# bind the selected value changes
+def office_changed(event):
+    window_combo.set('')
+    x= selected_office.get()
 
-download_icon = tk.PhotoImage(file='download.png')
+    window_list = []
+    query = conn.cursor()
+    query.execute("SELECT name FROM Windows WHERE office_id=?", (x,))
+    rows = query.fetchall()
+    print(rows)
+
+    if len(rows) > 0:
+        for row in rows:
+            window_list.append(row)
+            window_combo['values'] = [w_item for w_result in window_list for w_item in w_result if w_item]
+    else:
+        window_combo['values'] = window_list
+
+office_combo.bind('<<ComboboxSelected>>', office_changed)
+
 
 def create_file():
     x = selected_station.get()
-
-    if len(selected_station.get()) and len(selected_office.get()) != 0 :
+    if len(selected_station.get()) and len(selected_office.get()) != 0 and len(selected_window.get()) != 0:
         query = conn.cursor()
-        query.execute("SELECT * FROM Enr_stations WHERE Id=?", (x,))
+        query.execute("SELECT * FROM Stations WHERE Arabic_Name=?", (x,))
         m = query.fetchall()
 
         # loop throw selected station query
         for w in m:
             print(w[5], w[4], w[2], w[3])
 
-        # ocity file date
-        with open(os.path.join(sys.path[0], "ocity.yml"), "w") as f:
-            f.write("ocity:\n" + "\tbaseURL: https://obs.enr.gov.eg/" + w[5] + "/api/v2\n" +
-                    "\toauth.authorizationURI: https://obs.enr.gov.eg/oauth/token\n"
-                    + "\toauth.tokenURI: https://obs.enr.gov.eg/oauth/token")
-
-        # platform file data
-        with open(os.path.join(sys.path[0], "platform.yml"), "w") as x:
-            x.write(
-                "platform:\n" + "\tticketPrinterURL: custom\n" + "\tticketPrinterHost: COM2\n" +
-                "\tprinterName: default\n" + "\tsyncClock: false\n" +
-                "\tqrReaderPort: COM6")
-
-
-        # terminal file data
-        with open(os.path.join(sys.path[0], "terminal.yml"), "w") as t:
-            t.write("terminal:\n" + "\tsoftwareVersion: 1.0.0\n" + "\tmerchant: " + w[5] + "\n" +
-                    "\tmerchantId: 453215056520282074\n" + "\tterminalId: " + getMachine_addr().strip("SerialNumber") + "\n" +
-                    "\tterminalCode: 001\n" + "\tstation: " + str(w[4]) + "\n" + "\tstationName: " + w[2] + "\n" + "\toffice: 456\n"
-                    + "\tofficeName: " + selected_office.get() + "\n" + "\tdefaultPersonId: 580686677551349744\n" + "\treturnTripAllowed: false\n" +
-                    "\topenReturnEnabled: false\n" + "\tinactivityTimeout: 600000\n" + "\tmandatoryNationalId: false\n"
-                     "\tticketsPerPurchaseLimit: 4\n")
-
-        print(type(getMachine_addr()))
-        # success message
-
-
         def signDate():
-            end_point = "http://127.0.0.1:8000/api/create/"
+            end_point = "https://ecards.pythonanywhere.com/api/create/"
             data = {
             'merchant' : w[5],
-            'terminalId': getMachine_addr().strip("SerialNumber") ,
+            'deviceNum': getMachine_addr().strip("SerialNumber"),
             'station': str(w[4]),
             'stationName': w[2],
-            'officeName':  selected_office.get()
+            'officeEn':  selected_office.get(),
+            'officeAr': selected_office.get(),
+            'window': selected_window.get(),
+            'type': tom_type()
             }
 
             headers = {
@@ -147,22 +176,45 @@ def create_file():
 
             response = requests.post(end_point, json=data, headers=headers)
             if response:
-                showinfo('Done', 'Files Created Successfully')
-                office_combo.set('')
-                station_combo.set('')
+                # ocity file date
+                with open(os.path.join(get_path(), "ocity.yml"), "w", encoding="utf-8") as f:
+                    f.write("ocity:\n" + "\tbaseURL: https://obs.enr.gov.eg/" + w[5] + "/api/v2\n" +
+                            "\toauth.authorizationURI: https://obs.enr.gov.eg/oauth/token\n"
+                            + "\toauth.tokenURI: https://obs.enr.gov.eg/oauth/token")
+
+                # platform file data
+                with open(os.path.join(get_path(), "platform.yml"), "w", encoding="utf-8") as x:
+                    x.write(
+                        "platform:\n" + "\tticketPrinterURL: custom\n" + "\tticketPrinterHost: COM2\n" +
+                        "\tprinterName: default\n" + "\tsyncClock: false\n" +
+                        "\tqrReaderPort: COM6")
+
+                # terminal file data
+                with open(os.path.join(get_path(), "terminal.yml"), "w", encoding="utf-8") as t:
+                    t.write("terminal:\n" + "\tsoftwareVersion: 1.0.0\n" + "\tmerchant: " + w[5] + "\n" +
+                            "\tmerchantId: 453215056520282074\n" + "\tterminalId: " + getMachine_addr().strip(
+                        "SerialNumber") + "\n" +
+                            "\tterminalCode: 001\n" + "\tstation: " + str(w[4]) + "\n" + "\tstationName: " + w[
+                                2] + "\n" + "\toffice: 456\n"
+                            + "\tofficeName: " + selected_office.get() + "\n" + "\tdefaultPersonId: 580686677551349744\n" + "\treturnTripAllowed: false\n" +
+                            "\topenReturnEnabled: false\n" + "\tinactivityTimeout: 600000\n" + "\tmandatoryNationalId: false\n"
+                                                                                               "\tticketsPerPurchaseLimit: 4\n")
+                showinfo('نجاح', 'تم التسجيل والانشاء بنجاح')
+            else:
+                showwarning("فشل" , 'فضل التسجيل برجاء المحاولة مرة اخري')
         signDate()
 
     else:
-
          # info message
-         showwarning('info', 'Please Select Station And Office ! ')
+         showwarning('info', 'برجاء اكمال جميع الحقول')
 
+download_icon = tk.PhotoImage(file='download.png')
 create = ttk.Button(
     root,
     text="Create",
     image=download_icon,
     compound=tk.LEFT,
     command=create_file
-    ).place(relx=.5, rely=.7, anchor=CENTER)
+    ).place(relx=.5, rely=.9, anchor=CENTER)
 
 root.mainloop()
